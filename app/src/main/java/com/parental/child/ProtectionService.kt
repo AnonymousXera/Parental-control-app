@@ -24,9 +24,8 @@ class ProtectionService : LifecycleService() {
 
     private lateinit var fusedLocationClient: FusedLocationProviderClient
     private var webSocket: WebSocket? = null
-    private var imageCapture: ImageCapture? = null
+    private var locationCallback: LocationCallback? = null
 
-    // Server address - replace with your actual server IP or Render/Glitch WebSocket URL
     private val serverUrl = "ws://10.0.2.2:8080"
 
     override fun onCreate() {
@@ -56,11 +55,17 @@ class ProtectionService : LifecycleService() {
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             startForeground(
                 1001,
                 notification,
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+            )
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startForeground(
+                1001,
+                notification,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
             )
         } else {
             startForeground(1001, notification)
@@ -82,11 +87,11 @@ class ProtectionService : LifecycleService() {
     }
 
     private fun startGpsUpdates() {
-        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000)
-            .setMinUpdateIntervalMillis(5000)
+        val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000L)
+            .setMinUpdateIntervalMillis(5000L)
             .build()
 
-        val callback = object : LocationCallback() {
+        locationCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 val loc = result.lastLocation ?: return
                 val payload = """{"type":"gps","lat":${loc.latitude},"lng":${loc.longitude}}"""
@@ -96,7 +101,9 @@ class ProtectionService : LifecycleService() {
         }
 
         try {
-            fusedLocationClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
+            locationCallback?.let {
+                fusedLocationClient.requestLocationUpdates(request, it, Looper.getMainLooper())
+            }
         } catch (e: SecurityException) {
             Log.e("ProtectionService", "GPS Permission denied: ${e.message}")
         }
@@ -106,7 +113,7 @@ class ProtectionService : LifecycleService() {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(this)
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
-            imageCapture = ImageCapture.Builder()
+            val imageCapture = ImageCapture.Builder()
                 .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
                 .build()
 
@@ -114,7 +121,7 @@ class ProtectionService : LifecycleService() {
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(this, cameraSelector, imageCapture)
 
-                imageCapture?.takePicture(
+                imageCapture.takePicture(
                     ContextCompat.getMainExecutor(this),
                     object : ImageCapture.OnImageCapturedCallback() {
                         override fun onCaptureSuccess(image: ImageProxy) {
@@ -139,6 +146,7 @@ class ProtectionService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        locationCallback?.let { fusedLocationClient.removeLocationUpdates(it) }
         webSocket?.close(1000, "Service destroyed")
     }
 }
