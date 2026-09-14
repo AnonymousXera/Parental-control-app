@@ -14,17 +14,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
+
         val btn = Button(this).apply {
-            text = "Enable Protection"
-            setOnClickListener {
-                checkAndRequestPermissions()
-            }
+            text = "Activate Complete Protection"
+            setOnClickListener { checkAllPermissions() }
         }
         setContentView(btn)
     }
 
-    private fun checkAndRequestPermissions() {
+    private fun checkAllPermissions() {
         val permissions = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
@@ -34,25 +32,25 @@ class MainActivity : AppCompatActivity() {
             permissions.add(Manifest.permission.POST_NOTIFICATIONS)
         }
 
-        val needed = permissions.filter {
+        val missing = permissions.filter {
             checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
         }
 
-        if (needed.isNotEmpty()) {
-            ActivityCompat.requestPermissions(this, needed.toTypedArray(), 101)
+        if (missing.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missing.toTypedArray(), 200)
         } else {
-            startServiceLogic()
+            launchProtection()
         }
     }
 
-    private fun startServiceLogic() {
-        val serviceIntent = Intent(this, LocationService::class.java)
+    private fun launchProtection() {
+        val intent = Intent(this, ProtectionService::class.java)
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(serviceIntent)
+            startForegroundService(intent)
         } else {
-            startService(serviceIntent)
+            startService(intent)
         }
-        Toast.makeText(this, "Protection Started!", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Protection Running!", Toast.LENGTH_SHORT).show()
     }
 
     override fun onRequestPermissionsResult(
@@ -61,8 +59,8 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 101) {
-            startServiceLogic()
+        if (requestCode == 200 && grantResults.all { it == PackageManager.PERMISSION_GRANTED }) {
+            launchProtection()
         }
     }
 }
